@@ -4,7 +4,7 @@ import logging
 import numpy as np
 import tensorflow as tf
 
-from tensorflow_helpers.utils.training import batch_generator
+from tensorflow_helpers.utils.data import batch_generator, index_dict
 
 
 class BaseModel(object):
@@ -21,12 +21,19 @@ class BaseModel(object):
         feed_dict = {self.input_dict[input_name]:data[input_name] for input_name in data.keys()}
         return feed_dict
     def _get_data_len(self, data):
-        return len(data[list(data.keys())[0]])
+        for k in data.keys():
+            if hasattr(data[k], '__len__'):
+                data_len = len(data[k])
+                return data_len
+        raise ValueError('Cannot determine the length of the data!')
 
     def set_session(self, session):
         self.sess = session
     def set_tensorboard_dir(self, tensorboard_dir):
         self.tensorboard_dir = tensorboard_dir
+
+    def epoch_callback(self, epoch, epoch_loss):
+        logging.info('Epoch: %s, loss: %s', epoch, epoch_loss)
 
     @abc.abstractmethod
     def build_model(self):
@@ -57,7 +64,7 @@ class BaseModel(object):
 
             rand_idx = np.random.permutation(nb_samples)
             for start, end in batch_generator(nb_samples, batch_size):
-                batch_data = {k:d[rand_idx[start:end]] for k,d in data_train.items()}
+                batch_data = index_dict(data_train, rand_idx[start:end])
 
                 feed_dict = self._create_feed_dict(batch_data)
                 _, train_loss = self.sess.run(
@@ -76,7 +83,8 @@ class BaseModel(object):
 
             epoch_loss /= batch_num
 
-            logging.info('Epoch: %s, loss: %s', epoch, epoch_loss)
+            self.epoch_callback(epoch, epoch_loss)
+
 
             if log_writer is not None:
                 epoch_loss_summary = tf.Summary(value=[tf.Summary.Value(tag="epoch_loss", simple_value=float(epoch_loss)), ])
@@ -89,7 +97,7 @@ class BaseModel(object):
 
         nb_samples = self._get_data_len(data)
         for start, end in batch_generator(nb_samples, batch_size):
-            batch_data = {k: d[start:end] for k, d in data.items()}
+            batch_data = index_dict(data, start, end)
 
             feed_dict = self._create_feed_dict(batch_data)
             predictions_batch = self.sess.run(
