@@ -13,6 +13,8 @@ class BaseModel(object):
         self.sess = None
         self.tensorboard_dir = None
 
+        self.__train_op = None
+
         self.op_loss = None
         self.op_predict = None
         self.input_dict = {}
@@ -49,11 +51,16 @@ class BaseModel(object):
         else:
             log_writer = None
 
-        with tf.name_scope("optimizer"):
-            train_op = tf.train.AdamOptimizer().minimize(self.op_loss)
+        if self.__train_op is None:
+            with tf.name_scope("optimizer"):
+                self.__train_op = tf.train.AdamOptimizer().minimize(self.op_loss)
 
-        # train the model
-        self.sess.run(tf.initialize_all_variables())
+            # merge summaries
+            summaries_merged = tf.merge_all_summaries()
+
+            # init variables
+            self.sess.run(tf.initialize_all_variables())
+
 
         nb_samples = self._get_data_len(data_train)
 
@@ -68,7 +75,7 @@ class BaseModel(object):
 
                 feed_dict = self._create_feed_dict(batch_data)
                 _, train_loss = self.sess.run(
-                    [train_op, self.op_loss],
+                    [self.__train_op, self.op_loss],
                     feed_dict=feed_dict
                 )
 
@@ -81,6 +88,11 @@ class BaseModel(object):
                     loss_summary = tf.Summary(value=[tf.Summary.Value(tag="batch_loss", simple_value=float(train_loss)),])
                     log_writer.add_summary(loss_summary, global_step)
 
+                    if global_step % 10 == 0 and summaries_merged is not None:
+                        summaries  = self.sess.run(summaries_merged, feed_dict=feed_dict)
+                        log_writer.add_summary(summaries, global_step)
+
+
             epoch_loss /= batch_num
 
             self.epoch_callback(epoch, epoch_loss)
@@ -89,7 +101,6 @@ class BaseModel(object):
             if log_writer is not None:
                 epoch_loss_summary = tf.Summary(value=[tf.Summary.Value(tag="epoch_loss", simple_value=float(epoch_loss)), ])
                 log_writer.add_summary(epoch_loss_summary, global_step)
-
 
 
     def predict(self, data, batch_size=64):
