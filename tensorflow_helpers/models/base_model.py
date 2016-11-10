@@ -9,19 +9,34 @@ from tensorflow_helpers.utils.data import batch_generator, index_dict
 
 class BaseModel(object):
     def __init__(self):
-
         self.sess = None
         self.tensorboard_dir = None
 
         self.__train_op = None
+        self._global_step = 0
+        self._epoch = 0
+        self.__summaries_merged = None
 
+        self.is_train = tf.placeholder_with_default(True, [], name='is_train')
         self.op_loss = None
         self.op_predict = None
-        self.input_dict = {}
 
-    def _create_feed_dict(self, data):
-        feed_dict = {self.input_dict[input_name]:data[input_name] for input_name in data.keys()}
+        self.log_writer = None
+
+        self.input_dict = {}
+        self.input_props = {
+            'train_only': []
+        }
+
+    def _create_feed_dict(self, data, is_train=True):
+        feed_dict = {
+            self.input_dict[input_name]: data[input_name]
+            for input_name in data.keys()
+            if is_train or input_name not in self.input_props['train_only']
+            }
+        feed_dict[self.is_train] = is_train
         return feed_dict
+
     def _get_data_len(self, data):
         for k in data.keys():
             if hasattr(data[k], '__len__'):
@@ -31,11 +46,34 @@ class BaseModel(object):
 
     def set_session(self, session):
         self.sess = session
+
     def set_tensorboard_dir(self, tensorboard_dir):
         self.tensorboard_dir = tensorboard_dir
 
     def epoch_callback(self, epoch, epoch_loss):
         logging.info('Epoch: %s, loss: %s', epoch, epoch_loss)
+
+    def add_input(self, name, shape, dtype=tf.float32, default=None, train_only=False, add_batch_dim=True):
+        full_shape = list(shape)
+
+        if add_batch_dim:
+            full_shape.insert(0, None)
+
+        if default is None:
+            inpt = tf.placeholder(tf.float32, full_shape, name=name)
+        else:
+            inpt = tf.placeholder_with_default(default, full_shape, name=name)
+
+        self.input_dict[name] = inpt
+        if train_only:
+            self.input_props['train_only'].append(name)
+
+        logging.info('Added input: %s - %s', name, full_shape)
+
+    def get_batch_size(self):
+        name = next(n for n in self.input_dict.keys() if n not in self.input_props['train_only'])
+        batch_size = tf.shape(self.input_dict[name])[0]
+        return batch_size
 
     @abc.abstractmethod
     def build_model(self):
@@ -45,26 +83,25 @@ class BaseModel(object):
         if self.sess is None:
             self.sess = tf.Session()
 
-        if self.tensorboard_dir is not None:
-            log_writer = tf.train.SummaryWriter(self.tensorboard_dir)
-            log_writer.add_graph(self.sess.graph)
-        else:
-            log_writer = None
+        if self.tensorboard_dir is not None and self.log_writer is None:
+            self.log_writer = tf.train.SummaryWriter(self.tensorboard_dir)
+            self.log_writer.add_graph(self.sess.graph)
 
         if self.__train_op is None:
             with tf.name_scope("optimizer"):
                 self.__train_op = tf.train.AdamOptimizer().minimize(self.op_loss)
 
             # merge summaries
-            summaries_merged = tf.merge_all_summaries()
+            self.__summaries_merged = tf.merge_all_summaries()
 
             # init variables
             self.sess.run(tf.initialize_all_variables())
 
+            self._global_step = 0
+            self._epoch = 0
 
         nb_samples = self._get_data_len(data_train)
 
-        global_step = 0
         for epoch in range(nb_epoch):
             epoch_loss = 0
             batch_num = 0
@@ -80,42 +117,53 @@ class BaseModel(object):
                 )
 
                 batch_num += 1
-                global_step += 1
+                self._global_step += 1
 
                 epoch_loss += train_loss
 
-                if log_writer is not None:
-                    loss_summary = tf.Summary(value=[tf.Summary.Value(tag="batch_loss", simple_value=float(train_loss)),])
-                    log_writer.add_summary(loss_summary, global_step)
+                if self.log_writer is not None:
+                    loss_summary = tf.Summary(
+                        value=[tf.Summary.Value(tag="batch/loss", simple_value=float(train_loss)), ])
+                    self.log_writer.add_summary(loss_summary, self._global_step)
 
-                    if global_step % 10 == 0 and summaries_merged is not None:
-                        summaries  = self.sess.run(summaries_merged, feed_dict=feed_dict)
-                        log_writer.add_summary(summaries, global_step)
-
+                    if self._global_step % 10 == 0 and self.__summaries_merged is not None:
+                        summaries = self.sess.run(self.__summaries_merged, feed_dict=feed_dict)
+                        self.log_writer.add_summary(summaries, self._global_step)
 
             epoch_loss /= batch_num
 
-            self.epoch_callback(epoch, epoch_loss)
+            self.epoch_callback(self._epoch, epoch_loss)
+            self._epoch += 1
 
-
-            if log_writer is not None:
-                epoch_loss_summary = tf.Summary(value=[tf.Summary.Value(tag="epoch_loss", simple_value=float(epoch_loss)), ])
-                log_writer.add_summary(epoch_loss_summary, global_step)
-
+            if self.log_writer is not None:
+                epoch_loss_summary = tf.Summary(
+                    value=[tf.Summary.Value(tag="epoch/loss", simple_value=float(epoch_loss)), ])
+                self.log_writer.add_summary(epoch_loss_summary, self._global_step)
 
     def predict(self, data, batch_size=64):
-        predictions = []
+        predictions = None
 
         nb_samples = self._get_data_len(data)
         for start, end in batch_generator(nb_samples, batch_size):
             batch_data = index_dict(data, start, end)
 
-            feed_dict = self._create_feed_dict(batch_data)
+            feed_dict = self._create_feed_dict(batch_data, is_train=False)
             predictions_batch = self.sess.run(
                 self.op_predict,
                 feed_dict=feed_dict
             )
 
-            predictions += list(predictions_batch)
+            pr_len = len(predictions_batch)
+            if predictions is None:
+                if isinstance(predictions_batch, list):
+                    predictions = [[] for i in range(pr_len)]
+                else:
+                    predictions = []
+
+            if isinstance(predictions_batch, list):
+                for i in range(pr_len):
+                    predictions[i] += list(predictions_batch[i])
+            else:
+                predictions += list(predictions_batch)
 
         return predictions

@@ -6,6 +6,6 @@ setup(
     install_requires=['numpy', 'tensorflow'],
     author="Alexey Romanov",
     author_email="aromanov@cs.uml.edu",
-    description="different helpers for building Tensorflow models",
+    description="Different helpers for building Tensorflow models",
     url="https://github.com/text-machine-lab/tensorflow-helpers",
 )
