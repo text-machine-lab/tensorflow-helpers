@@ -18,6 +18,7 @@ class BaseModel(object):
         self.__summaries_merged = None
 
         self.is_train = tf.placeholder_with_default(True, [], name='is_train')
+        self.epoch = tf.placeholder_with_default(0, [], name='epoch')
         self.op_loss = None
         self.op_predict = None
 
@@ -28,13 +29,15 @@ class BaseModel(object):
             'train_only': []
         }
 
-    def _create_feed_dict(self, data, is_train=True):
+    def _create_feed_dict(self, data, is_train=True, epoch=0):
         feed_dict = {
             self.input_dict[input_name]: data[input_name]
             for input_name in data.keys()
             if is_train or input_name not in self.input_props['train_only']
             }
         feed_dict[self.is_train] = is_train
+        feed_dict[self.epoch] = epoch
+
         return feed_dict
 
     def _get_data_len(self, data):
@@ -60,7 +63,7 @@ class BaseModel(object):
             full_shape.insert(0, None)
 
         if default is None:
-            inpt = tf.placeholder(tf.float32, full_shape, name=name)
+            inpt = tf.placeholder(dtype, full_shape, name=name)
         else:
             inpt = tf.placeholder_with_default(default, full_shape, name=name)
 
@@ -92,10 +95,18 @@ class BaseModel(object):
                 self.__train_op = tf.train.AdamOptimizer().minimize(self.op_loss)
 
             # merge summaries
-            self.__summaries_merged = tf.merge_all_summaries()
+            try:
+                self.__summaries_merged = tf.summary.merge_all()
+            except AttributeError:
+                self.__summaries_merged = tf.merge_all_summaries()
 
             # init variables
-            self.sess.run(tf.initialize_all_variables())
+            try:
+                init = tf.global_variables_initializer()
+            except AttributeError:
+                init = tf.initialize_all_variables()
+
+            self.sess.run(init)
 
             self._global_step = 0
             self._epoch = 0
@@ -110,7 +121,7 @@ class BaseModel(object):
             for start, end in batch_generator(nb_samples, batch_size):
                 batch_data = index_dict(data_train, rand_idx[start:end])
 
-                feed_dict = self._create_feed_dict(batch_data)
+                feed_dict = self._create_feed_dict(batch_data, epoch=self._epoch)
                 _, train_loss = self.sess.run(
                     [self.__train_op, self.op_loss],
                     feed_dict=feed_dict
@@ -140,8 +151,11 @@ class BaseModel(object):
                     value=[tf.Summary.Value(tag="epoch/loss", simple_value=float(epoch_loss)), ])
                 self.log_writer.add_summary(epoch_loss_summary, self._global_step)
 
-    def predict(self, data, batch_size=64):
+    def predict(self, data, batch_size=64, target_op=None):
         predictions = None
+
+        if target_op is None:
+            target_op = self.op_predict
 
         nb_samples = self._get_data_len(data)
         for start, end in batch_generator(nb_samples, batch_size):
@@ -149,7 +163,7 @@ class BaseModel(object):
 
             feed_dict = self._create_feed_dict(batch_data, is_train=False)
             predictions_batch = self.sess.run(
-                self.op_predict,
+                target_op,
                 feed_dict=feed_dict
             )
 

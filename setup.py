@@ -3,7 +3,8 @@ setup(
     name = "Tensorflow Helpers",
     version = "0.1.0",
     packages = find_packages(),
-    install_requires=['numpy', 'tensorflow'],
+    install_requires=['numpy', ], # 'tensorflow'
+    extras_require = {'gpu': ['tensorflow-gpu>=0.12.0']},
     author="Alexey Romanov",
     author_email="aromanov@cs.uml.edu",
     description="Different helpers for building Tensorflow models",
