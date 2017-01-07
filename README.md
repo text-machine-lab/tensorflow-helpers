@@ -21,5 +21,5 @@ train the model using the `train_model` method.
 
 ### Example
 See an example here: 
-[examples/simple_model.ipynb](https://github.com/text-machine-lab/tensorflow-helpers/examples/simple_model.ipynb)
+[examples/simple_model.ipynb](https://github.com/text-machine-lab/tensorflow-helpers/blob/master/examples/simple_model.ipynb)
 
