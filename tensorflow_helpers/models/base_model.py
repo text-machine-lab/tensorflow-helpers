@@ -23,6 +23,7 @@ class BaseModel(object):
         self.op_predict = None
 
         self.log_writer = None
+        self.saver = None
 
         self.input_dict = {}
         self.input_props = {
@@ -33,7 +34,7 @@ class BaseModel(object):
         feed_dict = {
             self.input_dict[input_name]: data[input_name]
             for input_name in data.keys()
-            if is_train or input_name not in self.input_props['train_only']
+            if input_name in self.input_dict and (is_train or input_name not in self.input_props['train_only'])
             }
         feed_dict[self.is_train] = is_train
         feed_dict[self.epoch] = epoch
@@ -87,7 +88,7 @@ class BaseModel(object):
             self.sess = tf.Session()
 
         if self.tensorboard_dir is not None and self.log_writer is None:
-            self.log_writer = tf.train.SummaryWriter(self.tensorboard_dir)
+            self.log_writer = tf.summary.FileWriter(self.tensorboard_dir)
             self.log_writer.add_graph(self.sess.graph)
 
         if self.__train_op is None:
@@ -181,3 +182,22 @@ class BaseModel(object):
                 predictions += list(predictions_batch)
 
         return predictions
+
+    def save_model(self, name, global_step=None):
+        if self.sess is None:
+            self.sess = tf.Session()
+
+        if self.saver is None:
+            self.saver = tf.train.Saver(max_to_keep=100)
+
+        save_path = self.saver.save(self.sess, name, global_step=global_step)
+        return save_path
+
+    def restore_model(self, name):
+        if self.sess is None:
+            self.sess = tf.Session()
+
+        if self.saver is None:
+            self.saver = tf.train.Saver(max_to_keep=100)
+
+        self.saver.restore(self.sess, name)
