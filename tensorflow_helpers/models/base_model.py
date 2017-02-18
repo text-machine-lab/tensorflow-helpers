@@ -190,6 +190,9 @@ class BaseModel(object):
         if self.saver is None:
             self.saver = tf.train.Saver(max_to_keep=100)
 
+        if global_step is None:
+            global_step = self._global_step
+
         save_path = self.saver.save(self.sess, name, global_step=global_step)
         return save_path
 
