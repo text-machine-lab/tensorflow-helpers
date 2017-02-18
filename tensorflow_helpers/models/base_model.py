@@ -148,6 +148,7 @@ class BaseModel(object):
 
     def predict(self, data, batch_size=64, target_op=None):
         predictions = None
+        nb_predictions = 1
 
         if target_op is None:
             target_op = self.op_predict
@@ -162,20 +163,25 @@ class BaseModel(object):
                 feed_dict=feed_dict
             )
 
-            pr_len = len(predictions_batch)
             if predictions is None:
                 if isinstance(predictions_batch, list):
-                    predictions = [[] for i in range(pr_len)]
+                    nb_predictions = len(predictions_batch)
+                    predictions = [[] for i in range(nb_predictions)]
                 else:
                     predictions = []
 
-            if isinstance(predictions_batch, list):
-                for i in range(pr_len):
-                    predictions[i] += list(predictions_batch[i])
-            else:
+            if nb_predictions == 1:
                 predictions += list(predictions_batch)
+            else:
+                for i in range(nb_predictions):
+                    predictions[i] += list(predictions_batch[i])
 
-        predictions = np.array(predictions)
+        if nb_predictions == 1:
+            predictions = np.array(predictions)
+        else:
+            for i in range(nb_predictions):
+                predictions[i] = np.array(predictions[i])
+
         return predictions
 
     def save_model(self, name, global_step=None):
