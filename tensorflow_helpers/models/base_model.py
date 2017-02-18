@@ -133,24 +133,18 @@ class BaseModel(object):
 
                 epoch_loss += train_loss
 
-                if self.log_writer is not None:
-                    loss_summary = tf.Summary(
-                        value=[tf.Summary.Value(tag="batch/loss", simple_value=float(train_loss)), ])
-                    self.log_writer.add_summary(loss_summary, self._global_step)
+                self.write_scalar_summary("batch/loss", train_loss)
 
-                    if self._global_step % 10 == 0 and self.__summaries_merged is not None:
-                        summaries = self.sess.run(self.__summaries_merged, feed_dict=feed_dict)
-                        self.log_writer.add_summary(summaries, self._global_step)
+                if self._global_step % 10 == 0 and self.log_writer is not None and self.__summaries_merged is not None:
+                    summaries = self.sess.run(self.__summaries_merged, feed_dict=feed_dict)
+                    self.log_writer.add_summary(summaries, self._global_step)
 
             epoch_loss /= batch_num
 
             self.epoch_callback(self._epoch, epoch_loss)
             self._epoch += 1
 
-            if self.log_writer is not None:
-                epoch_loss_summary = tf.Summary(
-                    value=[tf.Summary.Value(tag="epoch/loss", simple_value=float(epoch_loss)), ])
-                self.log_writer.add_summary(epoch_loss_summary, self._global_step)
+            self.write_scalar_summary("epoch/loss", epoch_loss)
 
     def predict(self, data, batch_size=64, target_op=None):
         predictions = None
@@ -181,6 +175,7 @@ class BaseModel(object):
             else:
                 predictions += list(predictions_batch)
 
+        predictions = np.array(predictions)
         return predictions
 
     def save_model(self, name, global_step=None):
@@ -204,3 +199,16 @@ class BaseModel(object):
             self.saver = tf.train.Saver(max_to_keep=100)
 
         self.saver.restore(self.sess, name)
+
+    def write_image_summary(self, tag, image, nb_test_images=3):
+        if self.log_writer is not None:
+            image_data = tf.constant(image, dtype=tf.float32)
+
+            summary_op = tf.summary.image(tag, image_data, max_outputs=nb_test_images)
+            summary_res = self.sess.run(summary_op)
+            self.log_writer.add_summary(summary_res, self._global_step)
+
+    def write_scalar_summary(self, tag, value):
+        if self.log_writer is not None:
+            summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=float(value)), ])
+            self.log_writer.add_summary(summary, self._global_step)
