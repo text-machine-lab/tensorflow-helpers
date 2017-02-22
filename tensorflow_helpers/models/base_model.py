@@ -189,7 +189,7 @@ class BaseModel(object):
             self.sess = tf.Session()
 
         if self.saver is None:
-            self.saver = tf.train.Saver(max_to_keep=100)
+            self.saver = tf.train.Saver(max_to_keep=1000)
 
         if global_step is None:
             global_step = self._global_step
@@ -206,15 +206,21 @@ class BaseModel(object):
 
         self.saver.restore(self.sess, name)
 
-    def write_image_summary(self, tag, image, nb_test_images=3):
+    def write_image_summary(self, tag, image, nb_test_images=3, global_step=None):
         if self.log_writer is not None:
+            if global_step is None:
+                global_step = self._global_step
+
             image_data = tf.constant(image, dtype=tf.float32)
 
             summary_op = tf.summary.image(tag, image_data, max_outputs=nb_test_images)
             summary_res = self.sess.run(summary_op)
-            self.log_writer.add_summary(summary_res, self._global_step)
+            self.log_writer.add_summary(summary_res, global_step)
 
-    def write_scalar_summary(self, tag, value):
+    def write_scalar_summary(self, tag, value, global_step=None):
         if self.log_writer is not None:
+            if global_step is None:
+                global_step = self._global_step
+
             summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=float(value)), ])
-            self.log_writer.add_summary(summary, self._global_step)
+            self.log_writer.add_summary(summary, global_step)
