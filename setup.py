@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 setup(
-    name = "Tensorflow Helpers",
-    version = "0.1.8",
+    name = "tensorflow_helpers",
+    version = "0.1.9",
     packages = find_packages(),
     install_requires=['numpy', ], # 'tensorflow'
     extras_require = {'gpu': ['tensorflow-gpu>=0.12.0']},
