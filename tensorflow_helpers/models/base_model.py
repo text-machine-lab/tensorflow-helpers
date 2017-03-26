@@ -171,7 +171,10 @@ class BaseModel(object):
                     predictions = []
 
             if nb_predictions == 1:
-                predictions += list(predictions_batch)
+                try:
+                    predictions += list(predictions_batch)
+                except TypeError:
+                    predictions.append(predictions_batch)
             else:
                 for i in range(nb_predictions):
                     predictions[i] += list(predictions_batch[i])
