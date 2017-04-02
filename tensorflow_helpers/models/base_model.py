@@ -83,7 +83,11 @@ class BaseModel(object):
     def build_model(self):
         """Build the model and set input_dict, op_loss and op_predict"""
 
-    def train_model(self, data_train, nb_epoch=5, batch_size=64):
+    def train_model(self, data_train=None, nb_epoch=5, batch_size=64, **kwargs):
+        if data_train is None and len(kwargs) > 0:
+            data_train = {}
+            data_train.update(kwargs)
+
         if self.sess is None:
             self.sess = tf.Session()
 
@@ -109,7 +113,7 @@ class BaseModel(object):
 
             self.sess.run(init)
 
-            self._global_step = 0
+            self._global_step = 0 # tf.Variable(0, name='global_step', trainable=False)
             self._epoch = 0
 
         nb_samples = self._get_data_len(data_train)
@@ -146,12 +150,19 @@ class BaseModel(object):
 
             self.write_scalar_summary("epoch/loss", epoch_loss)
 
-    def predict(self, data, batch_size=64, target_op=None):
-        predictions = None
-        nb_predictions = 1
+    def predict(self, data=None, batch_size=64, target_op=None, **kwargs):
+        if self.sess is None:
+            self.sess = tf.Session()
 
         if target_op is None:
             target_op = self.op_predict
+
+        if data is None and len(kwargs) > 0:
+            data = {}
+            data.update(kwargs)
+
+        predictions = None
+        nb_predictions = 1
 
         nb_samples = self._get_data_len(data)
         for start, end in batch_generator(nb_samples, batch_size):
