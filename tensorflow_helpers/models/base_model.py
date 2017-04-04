@@ -19,6 +19,7 @@ class BaseModel(object):
 
         self.is_train = tf.placeholder_with_default(True, [], name='is_train')
         self.epoch = tf.placeholder_with_default(0, [], name='epoch')
+
         self.op_loss = None
         self.op_predict = None
 
@@ -35,7 +36,7 @@ class BaseModel(object):
             self.input_dict[input_name]: data[input_name]
             for input_name in data.keys()
             if input_name in self.input_dict and (is_train or input_name not in self.input_props['train_only'])
-            }
+        }
         feed_dict[self.is_train] = is_train
         feed_dict[self.epoch] = epoch
 
@@ -83,7 +84,7 @@ class BaseModel(object):
     def build_model(self):
         """Build the model and set input_dict, op_loss and op_predict"""
 
-    def train_model(self, data_train=None, nb_epoch=5, batch_size=64, **kwargs):
+    def train_model(self, data_train=None, nb_epoch=5, batch_size=64, optimizer=None, **kwargs):
         if data_train is None and len(kwargs) > 0:
             data_train = {}
             data_train.update(kwargs)
@@ -97,7 +98,10 @@ class BaseModel(object):
 
         if self.__train_op is None:
             with tf.name_scope("optimizer"):
-                self.__train_op = tf.train.AdamOptimizer().minimize(self.op_loss)
+                if optimizer is None:
+                    optimizer = tf.train.AdamOptimizer()
+
+                self.__train_op = optimizer.minimize(self.op_loss)
 
             # merge summaries
             try:
@@ -113,7 +117,7 @@ class BaseModel(object):
 
             self.sess.run(init)
 
-            self._global_step = 0 # tf.Variable(0, name='global_step', trainable=False)
+            self._global_step = 0  # tf.Variable(0, name='global_step', trainable=False)
             self._epoch = 0
 
         nb_samples = self._get_data_len(data_train)
