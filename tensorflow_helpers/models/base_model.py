@@ -17,6 +17,8 @@ class BaseModel(object):
         self._epoch = 0
         self.__summaries_merged = None
 
+        self.__request_stop_training = False
+
         self.is_train = tf.placeholder_with_default(True, [], name='is_train')
         self.epoch = tf.placeholder_with_default(0, [], name='epoch')
 
@@ -154,6 +156,9 @@ class BaseModel(object):
 
             self.write_scalar_summary("epoch/loss", epoch_loss)
 
+            if self.__request_stop_training:
+                break
+
     def predict(self, data=None, batch_size=64, target_op=None, **kwargs):
         if self.sess is None:
             self.sess = tf.Session()
@@ -226,6 +231,9 @@ class BaseModel(object):
             self.saver = tf.train.Saver(max_to_keep=100)
 
         self.saver.restore(self.sess, name)
+
+    def request_stop_training(self):
+        self.__request_stop_training = True
 
     def write_image_summary(self, tag, image, nb_test_images=3, global_step=None):
         if self.log_writer is not None:
